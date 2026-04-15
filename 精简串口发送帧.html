@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频转 16x8 点阵串口发送器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #eee;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2em;
+            background: linear-gradient(90deg, #00f5ff, #ff00ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 900px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .panel-title {
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            color: #00f5ff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* 视频源选择 */
+        .source-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .tab-btn {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #333;
+            background: transparent;
+            color: #888;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .tab-btn.active {
+            border-color: #00f5ff;
+            color: #00f5ff;
+            background: rgba(0, 245, 255, 0.1);
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #videoElement {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+        
+        #uploadedVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: none;
+        }
+        
+        .upload-area {
+            border: 2px dashed #444;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: #00f5ff;
+            color: #00f5ff;
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        /* 点阵预览 - 修改为16列8行 */
+        .matrix-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .matrix-preview {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);  /* 16列 */
+            grid-template-rows: repeat(8, 1fr);      /* 8行 */
+            gap: 2px;
+            background: #000;
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #333;
+        }
+        
+        .pixel {
+            width: 20px;
+            height: 20px;
+            background: #111;
+            border-radius: 2px;
+            transition: all 0.05s;
+        }
+        
+        .pixel.on {
+            background: #00f5ff;
+            box-shadow: 0 0 10px #00f5ff;
+        }
+        
+        .pixel.on.high {
+            background: #fff;
+            box-shadow: 0 0 15px #fff;
+        }
+        
+        /* 控制面板 */
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        label {
+            font-size: 0.85em;
+            color: #888;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            accent-color: #00f5ff;
+        }
+        
+        select, input[type="number"] {
+            padding: 8px;
+            background: #222;
+            border: 1px solid #444;
+            color: #fff;
+            border-radius: 6px;
+        }
+        
+        .value-display {
+            text-align: right;
+            color: #00f5ff;
+            font-family: monospace;
+        }
+        
+        /* 串口控制 */
+        .serial-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* 数据预览 - 修改为16字节垂直显示 */
+        .data-preview {
+            background: #0a0a0a;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+        
+        .data-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 5px;
+            align-items: center;
+        }
+        
+        .col-label {
+            color: #666;
+            min-width: 40px;
+            text-align: right;
+        }
+        
+        .byte-value {
+            color: #00f5ff;
+            min-width: 35px;
+            font-weight: bold;
+        }
+        
+        .binary-visual-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+        
+        .bit-row {
+            display: flex;
+            gap: 2px;
+        }
+        
+        .bit {
+            width: 8px;
+            height: 8px;
+            background: #333;
+            border-radius: 1px;
+        }
+        
+        .bit.active {
+            background: #00f5ff;
+        }
+        
+        /* 状态栏 */
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #dc3545;
+            transition: all 0.3s;
+        }
+        
+        .status-dot.active {
+            background: #00ff88;
+            box-shadow: 0 0 10px #00ff88;
+        }
+        
+        .status-dot.sending {
+            background: #00f5ff;
+            animation: pulse 0.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .fps-counter {
+            font-family: monospace;
+            color: #00f5ff;
+        }
+        
+        /* 隐藏的画布 */
+        #processCanvas {
+            display: none;
+        }
+        
+        /* 模式指示器 */
+        .mode-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            background: #333;
+            color: #888;
+        }
+        
+        .mode-badge.active {
+            background: #00f5ff;
+            color: #000;
+        }
+        
+        /* 警告框 */
+        .warning {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid #ffc107;
+            color: #ffc107;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .warning.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎥 视频转 16x8 点阵发送器</h1>
+        <p class="subtitle">实时视频采集 → 16x8 像素重采样(16字节/帧) → 串口输出</p>
+        
+        <div class="warning" id="browserWarning">
+            ⚠️ 您的浏览器不支持 Web Serial API。请使用 Chrome、Edge 或 Opera 浏览器（版本 89+）。
+        </div>
+        
+        <div class="main-grid">
+            <!-- 左侧：视频源 -->
+            <div class="panel">
+                <div class="panel-title">📹 视频源</div>
+                
+                <div class="source-tabs">
+                    <button class="tab-btn active" onclick="switchSource('camera', this)">摄像头</button>
+                    <button class="tab-btn" onclick="switchSource('video', this)">视频文件</button>
+                </div>
+                
+                <div class="video-container" id="videoContainer">
+                    <video id="videoElement" autoplay playsinline></video>
+                    <video id="uploadedVideo" loop playsinline></video>
+                    <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                        <div>📁 点击上传视频文件</div>
+                        <div style="font-size: 0.8em; margin-top: 10px; color: #666;">支持 MP4, WebM, MOV 格式</div>
+                    </div>
+                    <input type="file" id="fileInput" accept="video/*" onchange="handleFileUpload(event)">
+                </div>
+                
+                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button class="btn-primary" id="startCameraBtn" onclick="startCamera()">
+                        <span>📷</span> 启动摄像头
+                    </button>
+                    <button class="btn-danger" id="stopCameraBtn" onclick="stopVideoSource()" disabled>
+                        <span>⏹️</span> 停止
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 右侧：点阵预览 -->
+            <div class="panel">
+                <div class="panel-title">
+                    🔲 16x8 点阵预览 (16字节垂直)
+                    <span class="mode-badge" id="processingBadge">停止</span>
+                </div>
+                
+                <div class="matrix-container">
+                    <div class="matrix-preview" id="matrixPreview">
+                        <!-- 128 个像素点由 JS 生成 -->
+                    </div>
+                    
+                    <div style="display: flex; gap: 20px; font-size: 0.9em; color: #888;">
+                        <span>分辨率: 16列×8行 = 128 像素</span>
+                        <span>数据格式: 16字节(每字节=1列8像素)</span>
+                        <span>协议: 0xF1 + 16字节数据</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 控制参数 -->
+        <div class="panel" style="margin-bottom: 20px;">
+            <div class="panel-title">⚙️ 处理参数</div>
+            
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label>亮度阈值 <span class="value-display" id="thresholdValue">128</span></label>
+                    <input type="range" id="threshold" min="0" max="255" value="128" oninput="updateThreshold(this.value)">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: #666;">
+                        <span>黑</span><span>白</span>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label>发送帧率 <span class="value-display" id="fpsValue">10</span> FPS</label>
+                    <input type="range" id="targetFps" min="1" max="30" value="10" oninput="updateFps(this.value)">
+                </div>
+                
+                <div class="control-group">
+                    <label>反色模式</label>
+                    <select id="invertMode" onchange="updateInvert(this.value)">
+                        <option value="0">正常 (白底黑字)</option>
+                        <option value="1">反色 (黑底白字)</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label>抖动算法</label>
+                    <select id="ditherMode">
+                        <option value="none">无 (直接阈值)</option>
+                        <option value="bayer">Bayer 抖动</option>
+                        <option value="noise">随机噪声</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 串口控制 -->
+        <div class="panel">
+            <div class="panel-title">🔌 串口输出</div>
+            
+            <div class="serial-panel">
+                <div class="control-group">
+                    <label>波特率</label>
+                    <select id="baudRate">
+                        <option value="9600">9600</option>
+                        <option value="19200">19200</option>
+                        <option value="38400">38400</option>
+                        <option value="57600">57600</option>
+                        <option value="115200" selected>115200</option>
+                        <option value="230400">230400</option>
+                        <option value="921600">921600</option>
+                    </select>
+                </div>
+                
+                <button class="btn-primary" id="connectBtn" onclick="connectSerial()">
+                    <span>🔌</span> 连接串口
+                </button>
+                
+                <button class="btn-success" id="startSendBtn" onclick="startSending()" disabled>
+                    <span>▶️</span> 开始发送
+                </button>
+                
+                <button class="btn-warning" id="stopSendBtn" onclick="stopSending()" disabled>
+                    <span>⏸️</span> 停止发送
+                </button>
+                
+                <button class="btn-danger" id="disconnectBtn" onclick="disconnectSerial()" disabled>
+                    <span>❌</span> 断开
+                </button>
+            </div>
+            
+
+        </div>
+        
+        <!-- 状态栏 -->
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">就绪</span>
+            </div>
+            
+            <div class="fps-counter">
+                处理: <span id="processFps">0</span> FPS | 
+                发送: <span id="sendFps">0</span> FPS | 
+                总帧数: <span id="totalFrames">0</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 隐藏的处理画布 -->
+    <canvas id="processCanvas" width="16" height="8"></canvas>
+
+    <script>
+        // 全局变量
+        let video = document.getElementById('videoElement');
+        let uploadedVideo = document.getElementById('uploadedVideo');
+        let canvas = document.getElementById('processCanvas');
+        let ctx = canvas.getContext('2d', { willReadFrequently: true });
+        let currentSource = 'camera';
+        let isProcessing = false;
+        let isSending = false;
+        let port = null;
+        let writer = null;
+        let animationId = null;
+        
+        // 参数
+        let threshold = 128;
+        let targetFps = 10;
+        let invert = false;
+        let frameInterval = 100;
+        
+        // 统计
+        let processFps = 0;
+        let sendFps = 0;
+        let totalFrames = 0;
+        let lastProcessTime = 0;
+        let lastSendTime = 0;
+        let processCount = 0;
+        let sendCount = 0;
+        
+        // 初始化像素点阵
+        function initMatrix() {
+            const matrix = document.getElementById('matrixPreview');
+            matrix.innerHTML = '';
+            // 8行 x 16列 = 128个像素
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 16; col++) {
+                    const pixel = document.createElement('div');
+                    pixel.className = 'pixel';
+                    // ID格式: pixel-行-列，方便数据映射
+                    pixel.id = `pixel-${row}-${col}`;
+                    matrix.appendChild(pixel);
+                }
+            }
+        }
+        initMatrix();
+        
+        // 检查浏览器支持
+        if (!('serial' in navigator)) {
+            document.getElementById('browserWarning').classList.add('show');
+        }
+        
+        // 切换视频源
+        function switchSource(source, btnElement) {
+            // 先停止当前播放
+            stopVideoSource();
+            
+            currentSource = source;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            btnElement.classList.add('active');
+            
+            if (source === 'camera') {
+                document.getElementById('videoElement').style.display = 'none';
+                document.getElementById('uploadedVideo').style.display = 'none';
+                document.getElementById('uploadArea').style.display = 'none';
+                document.getElementById('startCameraBtn').style.display = 'flex';
+                document.getElementById('stopCameraBtn').disabled = true;
+            } else {
+                document.getElementById('videoElement').style.display = 'none';
+                document.getElementById('uploadedVideo').style.display = 'none';
+                document.getElementById('uploadArea').style.display = 'block';
+                document.getElementById('startCameraBtn').style.display = 'none';
+                document.getElementById('stopCameraBtn').disabled = true;
+            }
+        }
+        
+        // 启动摄像头
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 320 },
+                        height: { ideal: 240 }
+                    } 
+                });
+                video.srcObject = stream;
+                video.style.display = 'block';
+                await video.play();
+                
+                document.getElementById('startCameraBtn').disabled = true;
+                document.getElementById('stopCameraBtn').disabled = false;
+                document.getElementById('processingBadge').textContent = '运行中';
+                document.getElementById('processingBadge').classList.add('active');
+                
+                isProcessing = true;
+                processFrame();
+                updateStatus('摄像头运行中', 'active');
+                
+                // 如果有串口连接，启用发送按钮
+                if (port && writer) {
+                    document.getElementById('startSendBtn').disabled = false;
+                }
+            } catch (err) {
+                alert('无法访问摄像头: ' + err.message);
+            }
+        }
+        
+        // 停止视频源（统一处理摄像头和视频文件）
+        function stopVideoSource() {
+            isProcessing = false;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            // 停止摄像头
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            video.pause();
+            video.style.display = 'none';
+            
+            // 停止上传的视频
+            uploadedVideo.pause();
+            uploadedVideo.style.display = 'none';
+            document.getElementById('uploadArea').style.display = currentSource === 'video' ? 'block' : 'none';
+            
+            // 重置UI
+            document.getElementById('startCameraBtn').disabled = false;
+            document.getElementById('stopCameraBtn').disabled = true;
+            document.getElementById('processingBadge').textContent = '停止';
+            document.getElementById('processingBadge').classList.remove('active');
+            
+            // 停止发送
+            if (isSending) {
+                stopSending();
+            }
+            
+            // 禁用发送按钮（因为没有视频源）
+            document.getElementById('startSendBtn').disabled = true;
+            
+            updateStatus('已停止', '');
+        }
+        
+        // 处理文件上传
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const url = URL.createObjectURL(file);
+            uploadedVideo.src = url;
+            uploadedVideo.style.display = 'block';
+            document.getElementById('uploadArea').style.display = 'none';
+            
+            uploadedVideo.onloadeddata = () => {
+                uploadedVideo.play();
+                isProcessing = true;
+                processFrame();
+                document.getElementById('stopCameraBtn').disabled = false;
+                document.getElementById('processingBadge').textContent = '运行中';
+                document.getElementById('processingBadge').classList.add('active');
+                updateStatus('视频播放中', 'active');
+                
+                // 如果有串口连接，启用发送按钮
+                if (port && writer) {
+                    document.getElementById('startSendBtn').disabled = false;
+                }
+            };
+            
+            uploadedVideo.onended = () => {
+                // 视频播放结束，自动停止
+                stopVideoSource();
+            };
+        }
+        
+        // 更新参数
+        function updateThreshold(val) {
+            threshold = parseInt(val);
+            document.getElementById('thresholdValue').textContent = val;
+        }
+        
+        function updateFps(val) {
+            targetFps = parseInt(val);
+            frameInterval = 1000 / targetFps;
+            document.getElementById('fpsValue').textContent = val;
+        }
+        
+        function updateInvert(val) {
+            invert = val === '1';
+        }
+        
+        // 处理帧
+        function processFrame() {
+            if (!isProcessing) return;
+            
+            const currentVideo = currentSource === 'camera' ? video : uploadedVideo;
+            if (currentVideo.paused || currentVideo.ended) {
+                animationId = requestAnimationFrame(processFrame);
+                return;
+            }
+            
+            const now = performance.now();
+            
+            // 控制处理帧率
+            if (now - lastProcessTime >= frameInterval) {
+                // 绘制到 16x8 画布
+                ctx.drawImage(currentVideo, 0, 0, 16, 8);
+                
+                // 获取像素数据
+                const imageData = ctx.getImageData(0, 0, 16, 8);
+                const data = imageData.data;
+                
+                // 修改为：16字节，每字节代表一列的8个像素（垂直排列）
+                // bytes[0] = 第0列的8个像素（bit7在上，bit0在下）
+                // bytes[1] = 第1列的8个像素
+                // ...
+                // bytes[15] = 第15列的8个像素
+                const bytes = new Uint8Array(16);
+                
+                for (let col = 0; col < 16; col++) {
+                    let byte = 0;
+                    for (let row = 0; row < 8; row++) {
+                        // canvas坐标: (col, row)，注意canvas的y轴向下
+                        const i = (row * 16 + col) * 4;
+                        const gray = (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114);
+                        
+                        // 抖动或阈值
+                        let isOn = gray > threshold;
+                        if (invert) isOn = !isOn;
+                        
+                        // Bayer抖动
+                        if (document.getElementById('ditherMode').value === 'bayer') {
+                            const bayer = [
+                                [0, 8, 2, 10],
+                                [12, 4, 14, 6],
+                                [3, 11, 1, 9],
+                                [15, 7, 13, 5]
+                            ];
+                            const thresholdAdj = threshold + (bayer[row % 4][col % 4] - 8) * 16;
+                            isOn = gray > thresholdAdj;
+                            if (invert) isOn = !isOn;
+                        }
+                        
+                        // 更新视觉预览
+                        const pixel = document.getElementById(`pixel-${row}-${col}`);
+                        if (isOn) {
+                            pixel.classList.add('on');
+                            if (gray > 200) pixel.classList.add('high');
+                            else pixel.classList.remove('high');
+                        } else {
+                            pixel.classList.remove('on', 'high');
+                        }
+                        
+                        // 垂直排列：bit7是第0行（上），bit0是第7行（下）
+                        if (isOn) {
+                            byte |= (1 << (7 - row));
+                        }
+                    }
+                    bytes[col] = byte;
+                }
+                
+                // 更新数据预览
+                updateDataPreview(bytes);
+                
+                // 串口发送
+                if (isSending && port && writer) {
+                    sendFrame(bytes);
+                }
+                
+                // 统计
+                totalFrames++;
+                processCount++;
+                lastProcessTime = now;
+                
+                if (now - lastSendTime >= 1000) {
+                    processFps = processCount;
+                    sendFps = sendCount;
+                    processCount = 0;
+                    sendCount = 0;
+                    lastSendTime = now;
+                    updateStats();
+                }
+            }
+            
+            animationId = requestAnimationFrame(processFrame);
+        }
+        
+        // 更新数据预览 - 显示16字节，每字节代表一列8像素
+        function updateDataPreview(bytes) {
+            const preview = document.getElementById('dataPreview');
+            let html = '<div style="color: #888; margin-bottom: 10px;">帧头: 0xF1 | 数据: 16字节(每字节=1列8像素，bit7在上)</div>';
+            
+            // 显示16列的数据
+            for (let col = 0; col < 16; col++) {
+                const byte = bytes[col];
+                
+                html += `<div class="data-row">
+                    <span class="col-label">C${col.toString().padStart(2,'0')}:</span>
+                    <span class="byte-value">0x${byte.toString(16).padStart(2,'0').toUpperCase()}</span>
+                    <div class="binary-visual-vertical">`;
+                
+                // 显示8位（垂直方向，bit7在上对应第0行）
+                for (let bit = 7; bit >= 0; bit--) {
+                    const isActive = (byte >> bit) & 1;
+                    html += `<div class="bit-row">
+                        <span style="color: #444; font-size: 9px; width: 20px; text-align: right; margin-right: 5px;">R${7-bit}</span>
+                        <div class="bit ${isActive ? 'active' : ''}"></div>
+                    </div>`;
+                }
+                html += `</div></div>`;
+            }
+            
+            //preview.innerHTML = html;
+        }
+        
+        // 串口连接
+        async function connectSerial() {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: parseInt(document.getElementById('baudRate').value) });
+                
+                writer = port.writable.getWriter();
+                
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+                
+                // 只有视频运行时才启用发送按钮
+                document.getElementById('startSendBtn').disabled = !isProcessing;
+                
+                updateStatus('串口已连接', 'active');
+            } catch (err) {
+                alert('连接失败: ' + err.message);
+            }
+        }
+        
+        // 断开串口
+        async function disconnectSerial() {
+            stopSending();
+            
+            if (writer) {
+                writer.releaseLock();
+                writer = null;
+            }
+            if (port) {
+                await port.close();
+                port = null;
+            }
+            
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+            document.getElementById('startSendBtn').disabled = true;
+            document.getElementById('stopSendBtn').disabled = true;
+            
+            updateStatus('串口已断开', '');
+        }
+        
+        // 开始发送
+        function startSending() {
+            isSending = true;
+            document.getElementById('startSendBtn').disabled = true;
+            document.getElementById('stopSendBtn').disabled = false;
+            updateStatus('正在发送数据', 'sending');
+        }
+        
+        // 停止发送
+        function stopSending() {
+            isSending = false;
+            document.getElementById('startSendBtn').disabled = false;
+            document.getElementById('stopSendBtn').disabled = true;
+            updateStatus(isProcessing ? '运行中' : '就绪', isProcessing ? 'active' : '');
+        }
+        
+        // 发送帧数据 - 修改为：0xF1开头 + 16字节数据，无帧尾和校验和
+        async function sendFrame(bytes) {
+            try {
+                // 新数据格式: [0xF1 帧头] [16字节数据]
+                // 共17字节，无帧尾，无校验和
+                const packet = new Uint8Array(17);
+                packet[0] = 0xF1;  // 帧头
+                
+                for (let i = 0; i <16; i++) {
+					byte=bytes[i];
+				    byte = ((byte & 0x01) << 7) |
+                   ((byte & 0x02) << 5) |
+                   ((byte & 0x04) << 3) |
+                   ((byte & 0x08) << 1) |
+                   ((byte & 0x10) >> 1) |
+                   ((byte & 0x20) >> 3) |
+                   ((byte & 0x40) >> 5) |
+                   ((byte & 0x80) >> 7);
+                    packet[16-i] = byte;
+                }
+                
+                await writer.write(packet);
+                sendCount++;
+            } catch (err) {
+                console.error('发送失败:', err);
+                stopSending();
+            }
+        }
+        
+        // 更新状态显示
+        function updateStatus(text, state) {
+            document.getElementById('statusText').textContent = text;
+            const dot = document.getElementById('statusDot');
+            dot.className = 'status-dot ' + state;
+        }
+        
+        // 更新统计
+        function updateStats() {
+            document.getElementById('processFps').textContent = processFps;
+            document.getElementById('sendFps').textContent = sendFps;
+            document.getElementById('totalFrames').textContent = totalFrames;
+        }
+        
+        // 清理
+        window.addEventListener('beforeunload', () => {
+            stopVideoSource();
+            disconnectSerial();
+        });
+    </script>
+</body>
+</html>
